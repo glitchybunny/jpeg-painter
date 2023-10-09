@@ -1,0 +1,178 @@
+---
+layout: base.liquid
+title: JPEG Painter prototype
+---
+
+<style>
+  canvas {
+    width: 100%;
+    height: 100%;
+    outline: 1px solid black;
+  }
+</style>
+
+<h1>jpeg-painter</h1>
+<div>
+  <p>
+    <label
+      >Image upload:
+      <input
+        type="file"
+        id="upload-image"
+        accept="image/jpeg, image/png, image/jpg"
+    /></label>
+  </p>
+  <p>
+    <label
+      >Mask upload:
+      <input
+        type="file"
+        id="upload-mask"
+        accept="image/jpeg, image/png, image/jpg"
+      />
+    </label>
+  </p>
+</div>
+<div
+  style="
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    text-align: center;
+  "
+>
+  <div>
+    <p>input</p>
+    <canvas id="input"></canvas>
+  </div>
+  <div>
+    <p>compression mask</p>
+    <canvas id="map"></canvas>
+  </div>
+  <div>
+    <p>output</p>
+    <canvas id="output"></canvas>
+  </div>
+</div>
+<div style="display: none">
+  <img src="img/rabbit.png" id="image-input" />
+  <img src="img/mask.png" id="image-mask" />
+</div>
+
+<script>
+  let loaded = 0
+  const compressionLevels = {}
+  const count = 24
+
+  // Canvasses and stuff
+  const canvasIn = document.getElementById("input")
+  const ctxIn = canvasIn.getContext("2d")
+
+  const canvasMask = document.getElementById("map")
+  const ctxMask = canvasMask.getContext("2d")
+
+  const canvasOut = document.getElementById("output")
+  const ctxOut = canvasOut.getContext("2d")
+
+  // Upload image
+  const uploadImage = document.getElementById("upload-image")
+  uploadImage.addEventListener(
+    "change",
+    () => {
+      if (uploadImage.files && uploadImage.files[0]) {
+        let fileReader = new FileReader()
+        fileReader.onload = function (e) {
+          let img = new Image()
+          img.src = e.target.result
+          img.onload = function () {
+            // Resize canvases and add image to input
+            resizeCanvas(canvasIn, img.width, img.height)
+            resizeCanvas(canvasMask, img.width, img.height)
+            resizeCanvas(canvasOut, img.width, img.height)
+            ctxIn.drawImage(img, 0, 0)
+
+            // Compress
+            generateCompressionLevels()
+          }
+        }
+        fileReader.readAsDataURL(uploadImage.files[0])
+      }
+    },
+    false
+  )
+
+  // Upload mask
+  const uploadMask = document.getElementById("upload-mask")
+  uploadMask.addEventListener(
+    "change",
+    () => {
+      if (uploadMask.files && uploadMask.files[0]) {
+        let fileReader = new FileReader()
+        fileReader.onload = function (e) {
+          let img = new Image()
+          img.src = e.target.result
+          img.onload = function () {
+            // Add image to mask canvas (stretched)
+            ctxMask.filter = "grayscale(1)"
+            ctxMask.drawImage(img, 0, 0, canvasMask.width, canvasMask.height)
+
+            // Create output
+            generateOutput()
+          }
+        }
+        fileReader.readAsDataURL(uploadMask.files[0])
+      }
+    },
+    false
+  )
+
+  // Generate compression levels
+  function generateCompressionLevels() {
+    loaded = 0
+    for (i = 0; i < count; i++) {
+      // logarithmic because compression isn't linear
+      let compression = 1 / Math.pow(1.2, i)
+      let jpeg = canvasIn.toDataURL("image/jpeg", compression)
+      let imageElem = document.createElement("img")
+      imageElem.id = i
+      imageElem.addEventListener(
+        "load",
+        () => {
+          compressionLevels[imageElem.id] = imageElem
+          loaded += 1
+        },
+        false
+      )
+      imageElem.src = jpeg
+    }
+  }
+
+  // Use mask to generate output image (super slow)
+  async function generateOutput() {
+    if (loaded == count) {
+      // Get all image data to start
+      const imageData = ctxMask.getImageData(
+        0,
+        0,
+        canvasIn.width,
+        canvasIn.height
+      )
+      for (let x = 0; x < canvasIn.width; x += 8) {
+        for (let y = 0; y < canvasIn.height; y += 8) {
+          let pixel = imageData.data[(y * canvasIn.width + x) * 4]
+          let level = Math.floor(
+            (pixel / 256) * Object.keys(compressionLevels).length
+          )
+          ctxOut.drawImage(compressionLevels[level], x, y, 8, 8, x, y, 8, 8)
+        }
+      }
+    } else {
+      alert("No input image loaded")
+    }
+  }
+
+  //
+  function resizeCanvas(canvas, width, height) {
+    canvas.width = width
+    canvas.height = height
+  }
+</script>
