@@ -146,10 +146,10 @@ title: JPEG Painter prototype
     }
   }
 
-  // Use mask to generate output image (super slow)
+  // Use mask to generate output image
   async function generateOutput() {
     if (loaded == count) {
-      // Get all image data to start
+      // Get all image data before looping
       const imageData = ctxMask.getImageData(
         0,
         0,
